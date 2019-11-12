@@ -15,6 +15,7 @@ start:                        # YY: entering point of the program
   cli                         # Disable interrupts
   cld                         # String operations increment
 
+  # YY: The BIOS doesm't guarantee about the initial value of segment registers.
   # Set up the important data segment registers (DS, ES, SS), to 0.
   xorw    %ax,%ax             # Segment number zero
   movw    %ax,%ds             # -> Data Segment
@@ -52,6 +53,9 @@ seta20.2:
   
   # Jump to next instruction, but in 32-bit code segment.
   # Switches processor into 32-bit mode.
+  # YY: this "ljmp" instruction just jumps to the next instruction, does not
+  # change the logic of execution. The purpose is to truly switch to the 
+  # 32-bit mode. For detail, refer to xv6 book p101.
   ljmp    $PROT_MODE_CSEG, $protcseg
 
   .code32                     # Assemble for 32-bit mode

@@ -41,7 +41,7 @@ bootmain(void)
 	struct Proghdr *ph, *eph;
 
 	// read 1st page off disk
-	// YY: xv6 uses page size of 4KB = 8 x 512 bytes.
+	// YY: xv6 uses page size of 4KB = 8 x 512 = 4096 bytes.
 	readseg((uint32_t) ELFHDR, SECTSIZE*8, 0);
 
 	// is this a valid ELF?
@@ -62,6 +62,11 @@ bootmain(void)
 	((void (*)(void)) (ELFHDR->e_entry))();
 
 bad:
+	// YY: Something went wrong, send some output text to port 0x8a00. On real
+	// hardware, the port is not connected to any devices and nothing happens.
+	// On a PC simulator, the port is connected to the simulator itself and can
+	// transfer control back to the simulator. 
+	// The above is described in xv6 p101.
 	outw(0x8A00, 0x8A00);
 	outw(0x8A00, 0x8E00);
 	while (1)
