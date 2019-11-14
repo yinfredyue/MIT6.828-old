@@ -1,4 +1,4 @@
-Notes when reading webpate for Lab 1.
+## Lab 1
 
 ### Brennan's Guide to Inline Assembly
 Link: http://www.delorie.com/djgpp/doc/brennan/brennan_att_inline_djgpp.html  
@@ -60,8 +60,10 @@ Specify format: /s, /[num][size][format]
 
 `[f000:e05b]    0xfe05b: cmpl   $0x0, %cs:0x6ac8`. Compare 0 with the the value stored at memory location represented by `cs:0x6ac8` (the `segment:offset` notation). 
 
+### Exercise 2
+Use GDB's `si` (Step Instruction) command to trace into the ROM BIOS for a few more instructions, and try to guess what it might be doing. You might want to look at Phil Storrs I/O Ports Description, as well as other materials on the 6.828 reference materials page. No need to figure out all the details - just the general idea of what the BIOS is doing first.
 
-- real mode
+- Real mode  
 https://en.wikipedia.org/wiki/Real_mode#:~:targetText=Real%20mode%2C%20also%20called%20real,O%20addresses%20and%20peripheral%20hardware.  
 Real mode, also called real address mode, is an operating mode of all x86-compatible CPUs. Real mode is characterized by a 20-bit segmented memory address space (giving exactly 1 MiB of addressable memory) and unlimited direct software access to all addressable memory, I/O addresses and peripheral hardware. Real mode provides no support for memory protection, multitasking, or code privilege levels.  
 In real mode (the mode that PC starts off in), address translation works according to the formula with `(segment:offset)` address: `physical address = 16 * segment + offset`. 
@@ -100,7 +102,7 @@ https://zhuanlan.zhihu.com/p/36926462
    ```
    So the last instruction of the boot loader is `call   *0x10018`, and the first instruciton of the loaded kernel the code located at **the address stored at (!!)** `0x10018`.  
 
-   https://www.jianshu.com/p/84f62a05a7e6 Use `x/8x 0x10018` to inspect the content at `0x10018`, we get:
+   https://www.jianshu.com/p/84f62a05a7e6 Use `x/8x 0x10000` to inspect the content at `0x10018`, we get:
    ```
    (gdb) x/8x 0x10000
    0x10000:	0x464c457f	0x00010101	0x00000000	0x00000000
@@ -128,12 +130,17 @@ Easy exercise on C pointers. Detailed explanation: https://qiita.com/kagurazakak
 Read the content on ELF format very carefully.  
 
 ### Exercise 5
+**Answer**   
 Did not fully understand. Of course dismatching the link address and load address would cause problem.  
 
 ### Exercise 6
+Examine the 8 words of memory at 0x00100000 at the point the BIOS enters the boot loader, and then again at the point the boot loader enters the kernel. Why are they different? What is there at the second breakpoint? 
+
+**Answer**  
 When BIOS starts, memory location starting from `0x100000` are not used and the content at that address is all 0's. When boot loader enters the kernel, there are some contents are address `0x100000`. Clearly this is because the kernel is loaded into the memory. This is also explained in xv6 book: `The memory from 0xa0000 to 0x100000 is typically littered with device memory regions, and the xv6 kernel expects to be placed at 0x100000`.
 
 ### Exercise 7
+**Answer**   
 Kernel code is usually linked and executed at a *high* virtual address, in order to leave the lower part of the virtual memory space to the user programs. However, many machines do not have enough physical memory and thus virtual memory is introduced.  
 This switch from directly using physical memory address to using virtual memory address is achieved by setting the `CP0_PG` flag in `kern/entry.S`. Once `CR0_PG` is set, memory references are virtual addresses that get translated by the virtual memory hardware to physical addresses.  
 At this point, only 4MB are mapped: virtual addresses in the range `0xf0000000` through `0xf0400000` are mapped to physical addresses `0x00000000` through `0x00400000`. Virtual addresses `0x00000000` through `0x00400000` are ALSO mapped to physical addresses `0x00000000` through `0x00400000`. Any virtual address that is not in one of these two ranges will cause a hardware exception which, since we haven't set up interrupt handling yet, will cause QEMU to dump the machine state and exit.
@@ -445,6 +452,7 @@ For the following questions you might wish to consult the notes for **Lecture 2*
 ### Exercise 9
 Determine where the kernel initializes its stack, and exactly where in memory its stack is located. How does the kernel reserve space for its stack? And at which "end" of this reserved area is the stack pointer initialized to point to?  
 
+**Answer**  
 Global search for `stack` in the directory, you find that in `entry.S`, we have the following: 
 ```
 ...
@@ -928,8 +936,54 @@ Score: 50/50
 ```
 This completes Lab 1.  
 
+### Summary 
+- PC physical address space  
+    ```
+    +------------------+  <- 0xFFFFFFFF (4GB)
+    |      32-bit      |
+    |  memory mapped   |
+    |     devices      |
+    |                  |
+    /\/\/\/\/\/\/\/\/\/\
 
+    /\/\/\/\/\/\/\/\/\/\
+    |                  |
+    |      Unused      |
+    |                  |
+    +------------------+  <- depends on amount of RAM
+    |                  |
+    |                  |
+    | Extended Memory  |
+    |                  |
+    |                  |
+    +------------------+  <- 0x00100000 (1MB)
+    |     BIOS ROM     |
+    +------------------+  <- 0x000F0000 (960KB)
+    |  16-bit devices, |
+    |  expansion ROMs  |
+    +------------------+  <- 0x000C0000 (768KB)
+    |   VGA Display    |
+    +------------------+  <- 0x000A0000 (640KB)
+    |                  |
+    |    Low Memory    |
+    |                  |
+    +------------------+  <- 0x00000000
+    ```
+    Early PCs were only capable of addressing 1MB of physical memory. The physical address space of an early PC would therefore start at `0x00000000` but end at `0x000FFFFF`. The 640KB area marked "Low Memory" (`0x00000000` - `0x0000FFFF`) was the only random-access memory (RAM) that an early PC could use.
 
+    The 384KB area from `0x000A0000` through `0x000FFFFF` was reserved by the hardware. The most important part of this reserved area is the Basic Input/Output System (BIOS), which occupies the 64KB region.
+
+    Later PCs, for backward compatability, follows this layout. 
+    
+- Booting a computer  
+    - BIOS  
+        When BIOS runs, it sets up an interrupt descriptor table and other devices. After initialization, BIOS searches for a bootable device. 
+    - Boot Loader  
+        Hard disks are divided into 512-byte regions called `sectors`. A sector is the disk's minimum transfer granularity: each read or write operation must be one or more sectors. If the disk is bootable, the first sector is called the `boot sector`, since this is where the `boot loader` code resides. When the BIOS finds a bootable hard disk, it loads the 512-byte boot sector into memory at physical addresses `0x7c00` through `0x7dff`, and then uses a `jmp` instruction to set the `CS:IP` to `0000:7c00`, passing control to the boot loader. Like the BIOS load address(From `0xA0000` to `0xFFFFF`), these addresses are fairly arbitrary - but they are fixed and standardized for PCs.  
+
+        Boot loader reads each section of the kernel from disk into memory at the section's load address and then jumps to the kernel's entry point.
+    - Kernel  
+        Switch to virtual memory and initialize stack. 
 
 
 
