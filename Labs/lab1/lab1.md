@@ -513,21 +513,22 @@ Disassemble the function and refer to `kernel.asm`.
 ```
 (gdb) disas test_backtrace 
 Dump of assembler code for function test_backtrace:
-   0xf0100040 <+0>:	push   %ebp                 // function prologue, PUSH
-   0xf0100041 <+1>:	mov    %esp,%ebp
-   0xf0100043 <+3>:	push   %esi                 // save caller-saved register, PUSH 1 word
-   0xf0100044 <+4>:	push   %ebx                 // save caller-saved register, PUSH 1 word
-   0xf0100045 <+5>:	call   0xf01001ed <__x86.get_pc_thunk.bx>
+   0xf0100040 <+0>:	    push   %ebp             // function prologue, PUSH
+   0xf0100041 <+1>:	    mov    %esp,%ebp
+   0xf0100043 <+3>:	    push   %esi             // save caller-saved register, PUSH 1 word
+   0xf0100044 <+4>:	    push   %ebx             // save caller-saved register, PUSH 1 word
+   0xf0100045 <+5>:	    call   0xf01001ed <__x86.get_pc_thunk.bx>
    0xf010004a <+10>:	add    $0x112be,%ebx    
    0xf0100050 <+16>:	mov    0x8(%ebp),%esi
         cprintf("entering test_backtrace %d\n", x);
-   0xf0100053 <+19>:	sub    $0x8,%esp        // Allocate 2 words for cprintf
+   0xf0100053 <+19>:	sub    $0x8,%esp        // Allocate 2 words. Independent from 
+                                                // the following 2 pushes !!!
    0xf0100056 <+22>:	push   %esi             // PUSH 2nd arg, x, for cprintf, 1 wrod
    0xf0100057 <+23>:	lea    -0xf8a8(%ebx),%eax
    0xf010005d <+29>:	push   %eax             // PUSH 1st arg for cprintf, 1 word
 => 0xf010005e <+30>:	call   0xf0100a7a <cprintf>
         if (x > 0)
-   0xf0100063 <+35>:	add    $0x10,%esp       // Free args for cprintf, free 4 words
+   0xf0100063 <+35>:	add    $0x10,%esp       // Free 4 words
    0xf0100066 <+38>:	test   %esi,%esi
    0xf0100068 <+40>:	jg     0xf0100095 <test_backtrace+85>
             test_backtrace(x-1);
@@ -548,9 +549,9 @@ Dump of assembler code for function test_backtrace:
    }
    0xf010008b <+75>:	add    $0x10,%esp
    0xf010008e <+78>:	lea    -0x8(%ebp),%esp
-   0xf0100091 <+81>:	pop    %ebx
-   0xf0100092 <+82>:	pop    %esi
-   0xf0100093 <+83>:	pop    %ebp
+   0xf0100091 <+81>:	pop    %ebx                 // Restore caller-saved registers
+   0xf0100092 <+82>:	pop    %esi                 
+   0xf0100093 <+83>:	pop    %ebp                 // Function epilogue
    0xf0100094 <+84>:	ret    
         test_backtrace(x-1);
    0xf0100095 <+85>:	sub    $0xc,%esp            // Allocate 12 bytes on stack
@@ -565,8 +566,112 @@ End of assembler dump.
 (gdb) x /s $eax
 0xf0101a60:	"entering test_backtrace %d\n"
 ```
-During the function call: Push `%ebp` to stack in function prologue (4 bytes), then push caller-saved registers` %esi` and `%ebx` to stack (4 + 4 = 8 bytes), as they are used for calculating input for `cprintf`. Then it pushes arguments to the stack (4 + 4 = 8 bytes) and calls `cprintf`. After return from `cprintf`, `add $0x10,%esp` is used to free all memory allocated on stack to call `cprintf`, so at this point, the stack has grown by 4 bytes in total.  
-Then `test_traceback` is called, and jump to `<test_backtrace+85>`. 12 bytes are allocated on stack by `sub $0xc,%esp` and `%eax`(containing value of `x-1`) is pushed to stack as argument for `test_backtrace(x-1)`. So each nesting call to `test_backtrace` causes: 4 + 12 + 4 = 20 bytes = 5 words to be allocated on stack.
+During the function call: Push `%ebp` to stack in function prologue (4 bytes), `sub $0x8,%esp` allocate 8 bytes on the stack (8 bytes), then push caller-saved registers` %esi` and `%ebx` to stack (4 + 4 = 8 bytes), as they are used for calculating input for `cprintf`. Then it pushes arguments to the stack (4 + 4 = 8 bytes) and calls `cprintf`. After return from `cprintf`, `add $0x10,%esp` is used to free all memory allocated on stack to call `cprintf`, so at this point, the stack has grown by 4 + 8 = 12 bytes in total.  
+Then `test_traceback` is called, the return address is implicitly pushed on the stack (4 byte), and jump to `<test_backtrace+85>`. 12 bytes are allocated on stack by `sub $0xc,%esp` and `%eax`(containing value of `x-1`) is pushed to stack as argument for `test_backtrace(x-1)`. So each nesting call to `test_backtrace` causes: 12 + 4 + 12 + 4 = 32 bytes = 8 words to be allocated on stack.  
+
+> Note: initially I made 2 mistakes when calculating how much the stack grows for each nesting call. Firstly, I mistakenly mix `sub $0x8,%esp` and the following 2 pushes. Secondly, I forget about the implicit pushing of return address to the stack when `test_backtrace` is called again. And my previous, wrong answer is 5 words.  
+```
+(gdb) b test_backtrace 
+Breakpoint 1 at 0xf0100040: file kern/init.c, line 13.
+(gdb) c
+Continuing.
+The target architecture is assumed to be i386
+=> 0xf0100040 <test_backtrace>:	push   %ebp
+
+Breakpoint 1, test_backtrace (x=5) at kern/init.c:13
+13	{
+(gdb) disas test_backtrace 
+Dump of assembler code for function test_backtrace:
+=> 0xf0100040 <+0>:	    push   %ebp
+   0xf0100041 <+1>:	    mov    %esp,%ebp
+   0xf0100043 <+3>:	    push   %esi
+   0xf0100044 <+4>:	    push   %ebx
+   0xf0100045 <+5>:	    call   0xf01001ed <__x86.get_pc_thunk.bx>
+   0xf010004a <+10>:	add    $0x112be,%ebx
+   0xf0100050 <+16>:	mov    0x8(%ebp),%esi
+   0xf0100053 <+19>:	sub    $0x8,%esp
+   0xf0100056 <+22>:	push   %esi
+   0xf0100057 <+23>:	lea    -0xf8a8(%ebx),%eax
+   0xf010005d <+29>:	push   %eax
+   0xf010005e <+30>:	call   0xf0100a7a <cprintf>
+   0xf0100063 <+35>:	add    $0x10,%esp
+   0xf0100066 <+38>:	test   %esi,%esi
+   0xf0100068 <+40>:	jg     0xf0100095 <test_backtrace+85>
+   0xf010006a <+42>:	sub    $0x4,%esp
+   0xf010006d <+45>:	push   $0x0
+   0xf010006f <+47>:	push   $0x0
+   0xf0100071 <+49>:	push   $0x0
+   0xf0100073 <+51>:	call   0xf01008b4 <mon_backtrace>
+   0xf0100078 <+56>:	add    $0x10,%esp
+   0xf010007b <+59>:	sub    $0x8,%esp
+   0xf010007e <+62>:	push   %esi
+   0xf010007f <+63>:	lea    -0xf88c(%ebx),%eax
+   0xf0100085 <+69>:	push   %eax
+   0xf0100086 <+70>:	call   0xf0100a7a <cprintf>
+   0xf010008b <+75>:	add    $0x10,%esp
+   0xf010008e <+78>:	lea    -0x8(%ebp),%esp
+   0xf0100091 <+81>:	pop    %ebx
+   0xf0100092 <+82>:	pop    %esi
+   0xf0100093 <+83>:	pop    %ebp
+   0xf0100094 <+84>:	ret    
+   0xf0100095 <+85>:	sub    $0xc,%esp
+   0xf0100098 <+88>:	lea    -0x1(%esi),%eax
+   0xf010009b <+91>:	push   %eax
+   0xf010009c <+92>:	call   0xf0100040 <test_backtrace>
+   0xf01000a1 <+97>:	add    $0x10,%esp
+   0xf01000a4 <+100>:	jmp    0xf010007b <test_backtrace+59>
+End of assembler dump.
+(gdb) x/a $esp
+0xf010ffcc:	0xf01000f4
+(gdb) del 1
+(gdb) b *0xf0100073
+Breakpoint 2 at 0xf0100073: file kern/init.c, line 18.
+(gdb) c
+Continuing.
+=> 0xf0100073 <test_backtrace+51>:	call   0xf01008b4 <mon_backtrace>
+
+Breakpoint 2, 0xf0100073 in test_backtrace (x=0) at kern/init.c:18
+18			mon_backtrace(0, 0, 0);
+(gdb) x/a $esp
+0xf010ff10:	0x0
+```
+Then we know `%esp = 0xf010ffcc` on entry of first call to `test_backtrace`, and `%esp = 0xf010ff10` before calling `mon_backtrace(0, 0, 0)`. And we can inpect the stack frames now.
+```
+(gdb) x/48x $esp
+0xf010ff10:	0x00000000	0x00000000	0x00000000	0xf010004a
+0xf010ff20:	0xf0111308	0x00000001	0xf010ff48	0xf01000a1
+0xf010ff30:	0x00000000	0x00000001	0xf010ff68	0xf010004a
+0xf010ff40:	0xf0111308	0x00000002	0xf010ff68	0xf01000a1
+0xf010ff50:	0x00000001	0x00000002	0xf010ff88	0xf010004a
+0xf010ff60:	0xf0111308	0x00000003	0xf010ff88	0xf01000a1
+0xf010ff70:	0x00000002	0x00000003	0xf010ffa8	0xf010004a
+0xf010ff80:	0xf0111308	0x00000004	0xf010ffa8	0xf01000a1
+0xf010ff90:	0x00000003	0x00000004	0x00000000	0xf010004a
+0xf010ffa0:	0xf0111308	0x00000005	0xf010ffc8	(0xf01000a1)
+0xf010ffb0:	0x00000004	0x00000005	0x00000000	0xf010004a
+0xf010ffc0:	0xf0111308	0x00010094	0xf010fff8	[0xf01000f4]
+```
+Refer to `kernel.asm`, we see the next instrction after calling `test_backtrace` is 
+```
+[f01000f4]:	6a 04    push $0x4
+```
+and the next instruction after calling nested `test_backtarce` is
+```
+(f01000a1):	83 c4 10    add    $0x10,%esp
+```
+And we see its is pushed onto the stack. This corresponds to our observation before: on entry to the first call of `test_backtrace`, `%esp = 0xf010ffcc`. 
+Consider the stack involved in the first call to `test_backtrace(x=5)`, an 8-word block:  
+```             
+                +--- (x-1) arg
+0xf010ffa0:	    v                    			0xf01000a1 <--- return address
+0xf010ffb0:	0x00000004	0x00000005	0x00000000	0xf010004a
+0xf010ffc0:	0xf0111308	0x00010094	0xf010fff8	
+                ^           ^         ^-- %ebp of previous function
+                |           |
+                +-----------+-- "sub $0x8,%esp"
+```
+
+
 
 
 
