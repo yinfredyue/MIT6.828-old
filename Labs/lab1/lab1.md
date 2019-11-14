@@ -673,6 +673,39 @@ Consider the stack involved in the first call to `test_backtrace(x=5)`, an 8-wor
 *three words enclosed*: "sub  $0xc,%esp"
 ```
 
+### Exercise 11
+Implement the backtrace function as specified above. Use the same format as in the example, since otherwise the grading script will be confused. When you think you have it working right, run `make grade` to see if its output conforms to what our grading script expects, and fix it if it doesn't. After you have handed in your Lab 1 code, you are welcome to change the output format of the backtrace function any way you like.
+
+You can do it entirely in C, but you may find the `read_ebp()` function in `inc/x86.h` useful. You'll also have to hook this new function into the kernel monitor's command list so that it can be invoked interactively by the user.
+
+The backtrace function should display a listing of function call frames in the following format:
+
+```
+Stack backtrace:
+ebp f0109e58  eip f0100a62  args 00000001 f0109e80 f0109e98 f0100ed2 00000031
+ebp f0109ed8  eip f01000d6  args 00000000 00000000 f0100058 f0109f28 00000061
+...
+```
+Each line contains an `ebp`, `eip`, and `args`. The `ebp` value indicates the base pointer into the stack used by that function: i.e., the position of the stack pointer just after the function was entered and the function prologue code set up the base pointer. The listed `eip` value is the function's return instruction pointer: the instruction address to which control will return when the function returns. Finally, the five hex values listed after `args` are the first five arguments to the function in question, which would have been pushed on the stack just before the function was called. If the function was called with fewer than five arguments, of course, then not all five of these values will be useful. (Why can't the backtrace code detect how many arguments there actually are? How could this limitation be fixed?)
+
+The first line printed reflects the currently executing function, namely `mon_backtrace` itself, the second line reflects the function that called `mon_backtrace`, the third line reflects the function that called that one, and so on. You should print all the outstanding stack frames. By studying `kern/entry.S` you'll find that there is an easy way to tell when to stop.
+
+**Answer**  
+Refer to `entry.S`, you see
+```
+# Clear the frame pointer register (EBP)
+# so that once we get into debugging C code,
+# stack backtraces will be terminated properly.
+movl	$0x0,%ebp			# nuke frame pointer
+
+# Set the stack pointer
+movl	$(bootstacktop),%esp
+
+# now to C code
+call	i386_init
+```
+So `$0x0` would be the ending point of tracing back. 
+
 
 
 

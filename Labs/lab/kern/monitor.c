@@ -57,7 +57,34 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	// Your code here.
+	cprintf("Stack backtrace:\n");
+	int* curr_ebp = (int *) read_ebp();
+
+	while(true) {
+		int* prev_ebp = (int *) *curr_ebp;
+		// If prev_ebp == 0x0, it means the current function 
+		// is already the last function in the call stack, and
+		// thus you print the info and return.
+
+		// Assumption: int is 32-bit, 4 byte.
+		cprintf("  ");
+		cprintf("ebp %08x ", curr_ebp);
+		cprintf("eip %08x ", *(curr_ebp + 1));
+		
+		cprintf("args");
+		int *arg_p = curr_ebp + 2;
+		for (int i = 0; i < 5; ++i) {
+			cprintf(" %08x", *arg_p);
+			++arg_p;
+		}
+
+		cprintf("\n");
+		if (prev_ebp == 0) {
+			return 0;
+		} else {
+			curr_ebp = prev_ebp;
+		}
+	}
 	return 0;
 }
 
