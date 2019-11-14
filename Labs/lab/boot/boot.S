@@ -15,8 +15,8 @@ start:                        # YY: entering point of the program
   cli                         # Disable interrupts
   cld                         # String operations increment
 
-  # YY: The BIOS doesm't guarantee about the initial value of segment registers.
-  # Set up the important data segment registers (DS, ES, SS), to 0.
+  # YY: BIOS doesm't guarantee about the initial value of segment registers.
+  # Set the important data segment registers (DS, ES, SS), to 0.
   xorw    %ax,%ax             # Segment number zero
   movw    %ax,%ds             # -> Data Segment
   movw    %ax,%es             # -> Extra Segment

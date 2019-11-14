@@ -15,7 +15,8 @@ start:                        # YY: entering point of the program
   cld                         # String operations increment
     7c01:	fc                   	cld    
 
-  # Set up the important data segment registers (DS, ES, SS), to 0.
+  # YY: BIOS doesm't guarantee about the initial value of segment registers.
+  # Set the important data segment registers (DS, ES, SS), to 0.
   xorw    %ax,%ax             # Segment number zero
     7c02:	31 c0                	xor    %eax,%eax
   movw    %ax,%ds             # -> Data Segment
@@ -71,9 +72,11 @@ seta20.2:
     7c26:	66 83 c8 01          	or     $0x1,%ax
   movl    %eax, %cr0
     7c2a:	0f 22 c0             	mov    %eax,%cr0
-  
   # Jump to next instruction, but in 32-bit code segment.
   # Switches processor into 32-bit mode.
+  # YY: this "ljmp" instruction just jumps to the next instruction, does not
+  # change the logic of execution. The purpose is to truly switch to the 
+  # 32-bit mode. For detail, refer to xv6 book p101.
   ljmp    $PROT_MODE_CSEG, $protcseg
     7c2d:	ea                   	.byte 0xea
     7c2e:	32 7c 08 00          	xor    0x0(%eax,%ecx,1),%bh

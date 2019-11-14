@@ -23,7 +23,6 @@ void
 i386_init(void)
 {
 	extern char edata[], end[];
-
 	// Before doing anything else, complete the ELF loading process.
 	// Clear the uninitialized global data (BSS) section of our program.
 	// This ensures that all static/global variables start out zero.
@@ -37,6 +36,13 @@ i386_init(void)
 
 	// Test the stack backtrace function (lab 1 only)
 	test_backtrace(5);
+
+	// Testing code for lab1 exercise 
+	int x = 1, y = 3, z = 4;
+	cprintf("x %d, y %x, z %d\n", x, y, z);
+
+	unsigned int i = 0x00646c72;
+    cprintf("H%x Wo%s", 57616, &i);
 
 	// Drop into the kernel monitor.
 	while (1)
