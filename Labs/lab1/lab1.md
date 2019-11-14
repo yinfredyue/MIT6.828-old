@@ -442,6 +442,73 @@ For the following questions you might wish to consult the notes for **Lecture 2*
 
     Reverse the order of input arguments in the C code.  
 
+### Exercise 9
+Determine where the kernel initializes its stack, and exactly where in memory its stack is located. How does the kernel reserve space for its stack? And at which "end" of this reserved area is the stack pointer initialized to point to?  
+
+Global search for `stack` in the directory, you find that in `entry.S`, we have the following: 
+```
+...
+# Set the stack pointer
+movl	$(bootstacktop),%esp
+
+...
+
+.data
+###################################################################
+# boot stack
+###################################################################
+	.p2align	PGSHIFT		# force page alignment
+	.globl		bootstack
+bootstack:
+	.space		KSTKSIZE
+	.globl		bootstacktop   
+bootstacktop:
+```
+Guess this would be the code that allocates space for stack. This [answer](https://stackoverflow.com/q/33105872/9057530) confirms the thought. But what is the exact meanning of the code? Read this [answer](https://stackoverflow.com/a/32792778/9057530) from StackOverflow (quoted below).
+
+> `.p2align` will align the page with the bootstack to whatever value is defined in PGSHIFT. `bootstack` is a label (**memory address**) that happens to have space allocated after it with `.space KSTKSIZE` (amount of space allocated = KSTKSIZE). The `.globl bootstacktop` directive simply says that this label will be made global (like a variable declared `extern` in C). `bootstackstop` is another label (memory address) that will be **the address just after the last byte in `bootstack`**. It is also declared globally for other objects to use. `bootstacktop - bootstack = KSTKSIZE`.   
+
+As **`.data` segment grows from lower address to higher address**, `bootstacktop` would be the address of the top of the stack, i.e., `bootstacktop` is a pointer to the top of the stack, which is initially empty.  
+
+**Answer**
+- The `.space KSTKSIZE` in `entry.S` allocates space for kernel stack, and `movl	$(bootstacktop),%esp` in `entry.S` sets the stack pointer. 
+- In `kernel.asm`, 
+    ```
+        # Set the stack pointer
+        movl	$(bootstacktop),%esp
+        f0100034:	bc 00 00 11 f0       	mov    $0xf0110000,%esp
+    ```
+    so the top of the stack, when initialized, is located at `0xf0110000`. And the bound is `bootstack`: `0xf0110000 - KSTKSIZE = 0xf0108000`. This matches the expectation: stack grows from higher address towards lower address.  
+- The stack would look like 
+    ```
+    |               | 
+    |               |   
+    +---------------+  <-- bootstacktop 
+    |               |   
+    | KSTKSIZE bytes|          
+    |               |  
+    +---------------+  <-- bootstack
+    |               | 
+    |               | 
+    ```
+    And `bootstacktop` grows downwards towards boundary `bootstack`.  
+
+Note: this exercise involves new knowledge about assembly code. The links I referred to are as follows,  
+Assembly code symbol  
+https://stackoverflow.com/q/20830440/9057530    
+https://docs.oracle.com/cd/E19120-01/open.solaris/817-5477/esqaq/index.html  
+GNU Assembly Code Manual  
+https://sourceware.org/binutils/docs/as/  
+.data segment  
+https://stackoverflow.com/a/32792778/9057530  
+Answers  
+https://github.com/seporaitis/xv6-public/wiki/LAB-Assignment-1  
+https://www.jianshu.com/p/84f62a05a7e6
+
+
+### Exercise 10
+
+
 
 
 

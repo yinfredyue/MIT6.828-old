@@ -87,7 +87,7 @@ spin:	jmp	spin
 ###################################################################
 # boot stack
 ###################################################################
-	.p2align	PGSHIFT		# force page alignment
+	.p2align	PGSHIFT		# force page alignment, defined in mmu.h
 	.globl		bootstack
 bootstack:
 	.space		KSTKSIZE
