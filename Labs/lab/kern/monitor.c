@@ -24,6 +24,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display information about function call backtrace", mon_backtrace},
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -59,18 +60,18 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	cprintf("Stack backtrace:\n");
 	int* curr_ebp = (int *) read_ebp();
+	int* prev_ebp;
+	uint32_t eip;
 
 	while(true) {
-		int* prev_ebp = (int *) *curr_ebp;
+		prev_ebp = (int *) *curr_ebp;
 		// If prev_ebp == 0x0, it means the current function 
 		// is already the last function in the call stack, and
 		// thus you print the info and return.
 
-		// Assumption: int is 32-bit, 4 byte.
-		cprintf("  ");
-		cprintf("ebp %08x ", curr_ebp);
-		cprintf("eip %08x ", *(curr_ebp + 1));
-		
+		eip = (uint32_t) *(curr_ebp + 1);
+
+		cprintf("  ebp %08x eip %08x ", curr_ebp, eip);
 		cprintf("args");
 		int *arg_p = curr_ebp + 2;
 		for (int i = 0; i < 5; ++i) {
@@ -79,6 +80,16 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 		}
 
 		cprintf("\n");
+
+		// debugging info
+		struct Eipdebuginfo info;
+		debuginfo_eip(eip, &info);
+		cprintf("        ");
+		cprintf("%s:%d: ", info.eip_file, info.eip_line);
+		cprintf("%.*s", info.eip_fn_namelen, info.eip_fn_name);
+		cprintf("+%d\n", eip - (uint32_t)info.eip_fn_addr);
+
+		// Check ending
 		if (prev_ebp == 0) {
 			return 0;
 		} else {

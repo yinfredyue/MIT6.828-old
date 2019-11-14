@@ -706,6 +706,229 @@ call	i386_init
 ```
 So `$0x0` would be the ending point of tracing back. 
 
+**Code**
+```C
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+	cprintf("Stack backtrace:\n");
+	int* curr_ebp = (int *) read_ebp();
+	int* prev_ebp;
+
+	while(true) {
+		prev_ebp = (int *) *curr_ebp;
+		// If prev_ebp == 0x0, it means the current function 
+		// is already the last function in the call stack, and
+		// thus you print the info and return.
+
+        cprintf("  ebp %08x eip %08x ", curr_ebp, *(curr_ebp + 1));
+		cprintf("args");
+		int *arg_p = curr_ebp + 2;
+		for (int i = 0; i < 5; ++i) {
+			cprintf(" %08x", *arg_p);
+			++arg_p;
+		}
+
+		cprintf("\n");
+		if (prev_ebp == 0) {
+			return 0;
+		} else {
+			curr_ebp = prev_ebp;
+		}
+	}
+	return 0;
+}
+```
+
+Sample output
+```
+entering test_backtrace 5
+entering test_backtrace 4
+entering test_backtrace 3
+entering test_backtrace 2
+entering test_backtrace 1
+entering test_backtrace 0
+Stack backtrace:
+  ebp f010ff08 eip f0100078 args 00000000 00000000 00000000 f010004a f0111308
+  ebp f010ff28 eip f01000a1 args 00000000 00000001 f010ff68 f010004a f0111308
+  ebp f010ff48 eip f01000a1 args 00000001 00000002 f010ff88 f010004a f0111308
+  ebp f010ff68 eip f01000a1 args 00000002 00000003 f010ffa8 f010004a f0111308
+  ebp f010ff88 eip f01000a1 args 00000003 00000004 00000000 f010004a f0111308
+  ebp f010ffa8 eip f01000a1 args 00000004 00000005 00000000 f010004a f0111308
+  ebp f010ffc8 eip f01000f4 args 00000005 00001aac 00000640 00000000 00000000
+  ebp f010fff8 eip f010003e args 00000003 00001003 00002003 00003003 00004003
+leaving test_backtrace 0
+leaving test_backtrace 1
+leaving test_backtrace 2
+leaving test_backtrace 3
+leaving test_backtrace 4
+leaving test_backtrace 5
+```
+
+### Exercise 12
+At this point, your backtrace function should give you the addresses of the function callers on the stack that lead to `mon_backtrace`() being executed. However, in practice you often want to know the function names corresponding to those addresses.
+
+To help you implement this functionality, we have provided the function `debuginfo_eip()`, which looks up `eip` in the symbol table and returns the debugging information for that address. This function is defined in `kern/kdebug.c`.
+
+Modify your `stack_backtrace` function to display, for each `eip`, the function name, source file name, and line number corresponding to that eip.
+
+In `debuginfo_eip`, where do `__STAB_*` come from? This question has a long answer; to help you to discover the answer, here are some things you might want to do:
+
+- look in the file `kern/kernel.ld` for `__STAB_*`  
+- run `objdump -h obj/kern/kernel`
+- run `objdump -G obj/kern/kernel`  
+- run `gcc -pipe -nostdinc -O2 -fno-builtin -I. -MD -Wall -Wno-format -DJOS_KERNEL -gstabs -c -S kern/init.c`, and look at `init.s`.  
+- see if the bootloader loads the symbol table in memory as part of loading the kernel binary  
+
+Complete the implementation of `debuginfo_eip` by inserting the call to `stab_binsearch` to find the line number for an address.
+
+Add a `backtrace` command to the kernel monitor, and extend your implementation of `mon_backtrace` to call debuginfo_eip and print a line for each stack frame of the form:
+
+```
+K> backtrace
+Stack backtrace:
+  ebp f010ff78  eip f01008ae  args 00000001 f010ff8c 00000000 f0110580 00000000
+         kern/monitor.c:143: monitor+106
+  ebp f010ffd8  eip f0100193  args 00000000 00001aac 00000660 00000000 00000000
+         kern/init.c:49: i386_init+59
+  ebp f010fff8  eip f010003d  args 00000000 00000000 0000ffff 10cf9a00 0000ffff
+         kern/entry.S:70: <unknown>+0
+K> 
+```
+Each line gives the file name and line within that file of the stack frame's eip, followed by the name of the function and the offset of the eip from the first instruction of the function (e.g., monitor+106 means the return eip is 106 bytes past the beginning of monitor).
+
+Be sure to print the file and function names on a separate line, to avoid confusing the grading script.
+
+Tip: `printf` format strings provide an easy, albeit obscure, way to print non-null-terminated strings like those in STABS tables. `printf("%.*s", length, string)` prints at most `length` characters of `string`. Take a look at the printf man page to find out why this works.
+
+You may find that some functions are missing from the backtrace. For example, you will probably see a call to monitor() but not to runcmd(). This is because the compiler in-lines some function calls. Other optimizations may cause you to see unexpected line numbers. If you get rid of the `-O2` from GNUMakefile, the backtraces may make more sense (but your kernel will run more slowly).
+
+**Answer**  
+This exercise is mainly about reading the existing code and the STABS documentations. I refer to the 2 answers:  
+- https://github.com/seporaitis/xv6-public/wiki/LAB-Assignment-1  
+- https://www.jianshu.com/p/84f62a05a7e6
+
+**Code** 
+```C
+// kdebug.c 
+
+stab_binsearch(stabs, &lline, &rline, N_SLINE, addr);
+if (lline <= rline) {
+    info->eip_line = stabs[lline].n_desc;
+} else {
+    return -1;
+}
+```
+```C
+// monitor.c
+
+static struct Command commands[] = {
+	{ "help", "Display this list of commands", mon_help },
+	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display information about function call backtrace", mon_backtrace},
+};
+
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+	cprintf("Stack backtrace:\n");
+	int* curr_ebp = (int *) read_ebp();
+	int* prev_ebp;
+	uint32_t eip;
+
+	while(true) {
+		prev_ebp = (int *) *curr_ebp;
+		// If prev_ebp == 0x0, it means the current function 
+		// is already the last function in the call stack, and
+		// thus you print the info and return.
+
+		eip = (uint32_t) *(curr_ebp + 1);
+
+		cprintf("  ebp %08x eip %08x ", curr_ebp, eip);
+		cprintf("args");
+		int *arg_p = curr_ebp + 2;
+		for (int i = 0; i < 5; ++i) {
+			cprintf(" %08x", *arg_p);
+			++arg_p;
+		}
+
+		cprintf("\n");
+
+		// debugging info
+		struct Eipdebuginfo info;
+		debuginfo_eip(eip, &info);
+		cprintf("        ");
+		cprintf("%s:%d: ", info.eip_file, info.eip_line);
+		cprintf("%.*s", info.eip_fn_namelen, info.eip_fn_name);
+		cprintf("+%d\n", eip - (uint32_t)info.eip_fn_addr);
+
+		// Check ending
+		if (prev_ebp == 0) {
+			return 0;
+		} else {
+			curr_ebp = prev_ebp;
+		}
+	}
+	return 0;
+}
+```
+
+Sample output
+```
+K> backtrace
+Stack backtrace:
+  ebp f010ff48 eip f0100b20 args 00000001 f010ff70 00000000 f0101c4c 00010094
+        kern/monitor.c:160: monitor+332
+  ebp f010ffc8 eip f0100132 args 00000000 0000e110 f010ffec 00000000 00000000
+        kern/init.c:49: i386_init+140
+  ebp f010fff8 eip f010003e args 00000003 00001003 00002003 00003003 00004003
+        kern/entry.S:83: <unknown>+0
+K>
+```
+
+Grading output
+```
+make clean
+make[1]: Entering directory '/media/sf_MIT6_828/Labs/lab'
+rm -rf obj .gdbinit jos.in qemu.log
+make[1]: Leaving directory '/media/sf_MIT6_828/Labs/lab'
+./grade-lab1 
+make[1]: Entering directory '/media/sf_MIT6_828/Labs/lab'
+make[1]: Warning: File 'obj/.deps' has modification time 0.59 s in the future
+sh: echo: I/O error
++ as kern/entry.S
++ cc kern/entrypgdir.c
+sh: echo: I/O error
++ cc kern/init.c
++ cc kern/console.c
++ cc kern/monitor.c
++ cc kern/printf.c
++ cc kern/kdebug.c
++ cc lib/printfmt.c
++ cc lib/readline.c
++ cc lib/string.c
++ ld obj/kern/kernel
+ld: warning: section `.bss' type changed to PROGBITS
++ as boot/boot.S
++ cc -Os boot/main.c
++ ld boot/boot
+boot block is 390 bytes (max 510)
++ mk obj/kern/kernel.img
+make[1]: warning:  Clock skew detected.  Your build may be incomplete.
+make[1]: Leaving directory '/media/sf_MIT6_828/Labs/lab'
+running JOS: make[1]: Warning: File 'obj/.deps' has modification time 0.58 s in the future
+make[1]: warning:  Clock skew detected.  Your build may be incomplete.
+(1.0s) 
+  printf: OK 
+  backtrace count: OK 
+  backtrace arguments: OK 
+  backtrace symbols: OK 
+  backtrace lines: OK 
+Score: 50/50
+```
+This completes Lab 1.  
+
+
 
 
 
