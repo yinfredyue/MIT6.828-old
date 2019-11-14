@@ -664,11 +664,13 @@ Consider the stack involved in the first call to `test_backtrace(x=5)`, an 8-wor
 ```             
                 +--- (x-1) arg
 0xf010ffa0:	    v                    			0xf01000a1 <--- return address
-0xf010ffb0:	0x00000004	0x00000005	0x00000000	0xf010004a
+0xf010ffb0:	0x00000004	*0x00000005	0x00000000	0xf010004a* 
 0xf010ffc0:	0xf0111308	0x00010094	0xf010fff8	
                 ^           ^         ^-- %ebp of previous function
                 |           |
                 +-----------+-- "sub $0x8,%esp"
+
+*three words enclosed*: "sub  $0xc,%esp"
 ```
 
 
