@@ -46,7 +46,7 @@ So the stack grows from `0x7c00` towareds lower address. And you can also observ
 Then we start tracing through the aseembly.
 
 ### Step 2
-We know that boot loader would be loaded to `0x7c00`, while kernel code would be loaded to `0xA0000`. To trace through `bootmain` function, refer to `bootblock.asm` and see the address is `0x7d3b`.
+We know that boot loader would be loaded to `0x7c00`, while kernel code would be loaded to `0xA0000`. To trace through `bootmain` function, refer to `bootblock.asm` and see the address of `bootmain` is `0x7d3b`.
 ```
 (gdb) b *0x00007d3b
 Breakpoint 2 at 0x7d3b

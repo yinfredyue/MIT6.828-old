@@ -10,6 +10,11 @@
         "Dockerfile1_sphnix": "dockerfile",
         "Dockerfile6": "dockerfile",
         "console.h": "c",
-        "x86.h": "c"
+        "x86.h": "c",
+        "types.h": "c",
+        "user.h": "c",
+        "proc.h": "c",
+        "date.h": "c",
+        "syscall.h": "c"
     }
 }

@@ -103,48 +103,105 @@ void runcmd(struct cmd *cmd) {
             }
             break;
 
-        case '|':
-            pcmd = (struct pipecmd *)cmd;
+        // case '|':
+        //     /**
+        //      * By default, pipe is blocking. Thus, no explicit synchronization is
+        //      * needed for the pipe. The pipe's read() blocks until there are
+        //      * data available.
+        //      * You should understand that, though the file descriptor is changed
+        //      * by dup(), the underlying file is not changed. The behavior is
+        //      * still the behavior of the pipe.
+        //      */
+        //     pcmd = (struct pipecmd *)cmd;
 
-            // Initialize pipe
-            int p[2];
-            pipe(p);
+        //     int p[2];
+        //     pipe(p);
 
-            // Run left
-            if (fork1() == 0) {
-                close(1);
-                dup(p[1]);  // dup write end to fd 1
+        //     // Run left
+        //     if (fork1() == 0) {
+        //         close(1);
+        //         dup(p[1]);  // dup write end to fd 1
 
-                close(p[0]);  // close pipe
-                close(p[1]);
-                runcmd(pcmd->left);
-            }
+        //         close(p[0]);  // close pipe
+        //         close(p[1]);
+        //         runcmd(pcmd->left);
+        //     }
 
-            // Run right
-            if (fork1() == 0) {
+        //     // Run right
+        //     if (fork1() == 0) {
+        //         close(0);
+        //         dup(p[0]);  // dup read end to fd 0
+
+        //         close(p[0]);  // close pipe
+        //         close(p[1]);
+        //         runcmd(pcmd->right);
+        //     }
+
+        //     // These two closes are very important !!!
+        //     // As we call fork() 3 times, 3 processes share the pipe. close()
+        //     // would decrement the reference count of the read/write end of the
+        //     // pipe accordingly.
+        //     // However, if the pipe is not closed in the parent process, then
+        //     // read(), in the right command, would keeps being blocked, though
+        //     // the left command can exit normally. You can verify this by adding
+        //     // a wait() after the code for left command.
+        //     close(p[0]);
+        //     close(p[1]);
+
+        //     wait(NULL);
+        //     wait(NULL);
+        //     break;
+
+            // case '|':  // With single fork
+            //         pcmd = (struct pipecmd *)cmd;
+
+            //         int p[2];
+            //         pipe(p);
+
+            //         // Run right
+            //         if (fork1() == 0) {
+            //             close(0);
+            //             dup(p[0]);  // dup read end to fd 0
+
+            //             close(p[0]);  // close pipe
+            //             close(p[1]);
+            //             runcmd(pcmd->right);
+            //         }
+
+            //         // Run left
+            //         close(1);
+            //         dup(p[1]);  // dup write end to fd 1
+
+            //         close(p[0]);  // close pipe
+            //         close(p[1]);
+            //         runcmd(pcmd->left); // Note that it _exit().
+
+            case '|':  // With single fork
+                pcmd = (struct pipecmd *)cmd;
+
+                int p[2];
+                pipe(p);
+
+                // Run left
+                if (fork1() == 0) {
+                    close(1);
+                    dup(p[1]);  // dup write end to fd 1
+
+                    close(p[0]);  // close pipe
+                    close(p[1]);
+                    runcmd(pcmd->left);
+                }
+
+                wait(NULL);
+
+                // Run right
                 close(0);
                 dup(p[0]);  // dup read end to fd 0
 
                 close(p[0]);  // close pipe
                 close(p[1]);
+
                 runcmd(pcmd->right);
-            }
-
-
-            // These two closes are very important !!!
-            // As we call fork() 3 times, 3 processes share the pipe. close()
-            // would decrement the reference count of the read/write end of the
-            // pipe accordingly. 
-            // However, if the pipe is not closed in the parent process, then
-            // read(), in the right command, would keeps being blocked, though
-            // the left command can exit normally. You can verify this by adding
-            // a wait() after the code for left command.
-            close(p[0]);
-            close(p[1]);
-
-            wait(NULL);
-            wait(NULL);
-            break;
     }
     _exit(0);
 }

@@ -52,6 +52,7 @@ bootmain(void)
 	ph = (struct Proghdr *) ((uint8_t *) ELFHDR + ELFHDR->e_phoff); 
 	// YY: ph is the start of the program header 
 	eph = ph + ELFHDR->e_phnum;  // YY: eph is the end of the program header
+	
 	for (; ph < eph; ph++)
 		// p_pa is the load address of this segment (as well
 		// as the physical address)
@@ -76,7 +77,9 @@ bad:
 // Read 'count' bytes at 'offset' from kernel into physical address 'pa'.
 // Might copy more than asked
 // YY: "Might copy more than asked" because a sector is the smallest unit
-// of any reading/writing.
+// of any reading/writing and the number of bytes copied must be a multiple of
+// SECTSIZE.
+// YY: Note that 'offset' is with respect to the kernel.
 void
 readseg(uint32_t pa, uint32_t count, uint32_t offset)
 {
