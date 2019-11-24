@@ -138,7 +138,7 @@ These are saved registers saved by `INT`: err, eip, cs, eflags, esp, ss. They ar
 
 `INT`'s job:  
 - switched to current process's kernel stack (change %esp)
-- saved some user registers on kernel stack
+- hardware would save some user registers on kernel stack
 - set CPL=0
 - start executing at kernel-supplied "vector" (`jmp <alltraps>`)
 
