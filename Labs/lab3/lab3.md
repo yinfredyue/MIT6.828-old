@@ -378,3 +378,271 @@ Would be similar to what xv6 does. Requires too much hardcoding. Would do in the
 
 	If allowed, protection is lost. Can attack kernel.  
 
+## Exercise 5
+A very eassy exercise.
+```C
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+	// Handle processor exceptions.
+	// LAB 3: Your code here.
+	switch (tf->tf_trapno) {
+		case T_PGFLT:
+			page_fault_handler(tf);
+			break;
+		default:
+			break;
+	}
+
+	// Unexpected trap: The user process or the kernel has a bug.
+	print_trapframe(tf);
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled trap in kernel");
+	else {
+		env_destroy(curenv);
+		return;
+	}
+}
+```
+
+## Exercise 6
+Read the instruction very carefully. Need to turn `T_BRKPT` into a "primitive pseudo-system call that any user environment can use to invoke the JOS kernel monitor".
+
+In `trapinit()`:
+```C
+SETGATE(idt[T_BRKPT], 1, GD_KT, BRKPT, 3);  // Lab3: Changed to a pseudo 
+											// system call that can be 
+											// invoked by any user code. 
+```
+In `trap_dispatch()`:
+```C
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+	// Handle processor exceptions.
+	// LAB 3: Your code here.
+	switch (tf->tf_trapno) {
+		case T_PGFLT:
+			page_fault_handler(tf);
+			break;
+		case T_BRKPT:
+			monitor(tf);
+			break;
+		default:
+			break;
+	}
+
+	// Unexpected trap: The user process or the kernel has a bug.
+	print_trapframe(tf);
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled trap in kernel");
+	else {
+		env_destroy(curenv);
+		return;
+	}
+}
+```
+
+## Question 
+3. The break point test case will either generate a break point exception or a general protection fault depending on how you initialized the break point entry in the IDT (i.e., your call to `SETGATE` from `trap_init`). Why? How do you need to set it up in order to get the breakpoint exception to work as specified above and what incorrect setup would cause it to trigger a general protection fault?  
+
+	If the privilege level is enabled for user, then break point exception. Otherwise, a general protection fault. Code:  
+	```C
+	SETGATE(idt[T_BRKPT], 1, GD_KT, BRKPT, 3);
+	```
+	In correct code would set DPL to 0.
+	
+4. What do you think is the point of these mechanisms, particularly in light of what the user/softint test program does?  
+
+	The kernel determines the protection level and interface to the user program.
+
+
+## Exericse 7
+This exercise is not hard as detailed instruction is given and we are already familar with the system call mechanism. The only tricky gotcha (wasted 3 hours on it) is in `trap_dispatch` in `trap.c`:
+```C
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+	cprintf("trap_dispatch called\n");
+
+	// Handle processor exceptions.
+	// LAB 3: Your code here.
+	switch (tf->tf_trapno) {
+		// You should "return" instead of "break"!
+		case T_PGFLT:
+			page_fault_handler(tf);
+			return;
+		case T_BRKPT:
+			monitor(tf);
+			return;
+		case T_SYSCALL:
+			tf->tf_regs.reg_eax = syscall(
+				tf->tf_regs.reg_eax, 
+				tf->tf_regs.reg_edx,
+				tf->tf_regs.reg_ecx,
+				tf->tf_regs.reg_ebx,
+				tf->tf_regs.reg_edi,
+				tf->tf_regs.reg_esi);
+			return;
+
+		default:
+			break;
+	}
+
+	
+	// Unexpected trap: The user process or the kernel has a bug.
+	print_trapframe(tf);
+
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled trap in kernel");
+	else {
+		env_destroy(curenv);
+		return;
+	}
+}
+```
+Note that you in switch statement, you should use `return` instead of `break`! Otherwise the user environment(process) would be destroyed!
+
+## Exercise 8
+Again, detailed instruction is given but spend another 20 minutes debugging. The bug is from switch statement again :(  
+
+In `kern/syscall.c`:
+```C
+int32_t
+syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+{
+	// Call the function corresponding to the 'syscallno' parameter.
+	// Return any appropriate return value.
+	// LAB 3: Your code here.
+	int32_t res;
+
+	switch (syscallno) {
+		case SYS_cputs:
+			sys_cputs((const char *)a1, a2);
+			res = 0;
+			break;
+		case SYS_cgetc:
+			res = sys_cgetc();
+			break;
+		case SYS_getenvid:
+			res = sys_getenvid();
+			break;
+		case SYS_env_destroy:
+			res = sys_env_destroy(a1);
+			break;
+		default:
+			res = -E_INVAL;
+	}
+	return res;
+}
+```
+Previously I forget to add `break` statements.
+
+## Exercise 9 & 10
+Panic when page fault in kernel mode.
+```diff
+--- a/kern/trap.c
++++ b/kern/trap.c
+@@ -274,6 +274,9 @@ page_fault_handler(struct Trapframe *tf)
+        // Handle kernel-mode page faults.
+ 
+        // LAB 3: Your code here.
++       if ((tf->tf_cs & 3) == 0) {
++               panic("Page fault in kernel-mode!");
++       }
+ 
+        // We've already handled kernel-mode exceptions, so if we get here,
+        // the page fault happened in user mode.
+
+```
+
+Check pointers passed into system call from user code. 
+```diff
+--- a/kern/pmap.c
++++ b/kern/pmap.c
+@@ -666,6 +666,33 @@ int
+ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
+ {
+        // LAB 3: Your code here.
++       pte_t *pte_p;
++       uintptr_t start, end, addr;
++       uintptr_t required_perm;
++
++       start = (uintptr_t)ROUNDDOWN(va, PGSIZE);
++       end = (uintptr_t)ROUNDUP(va + len, PGSIZE);
++
++       required_perm = perm | PTE_P | PTE_U;
++
++       for(addr = start; addr < end; addr += PGSIZE) {
++               // Check below ULIM
++               if (addr < ULIM) {
++                       // Check permission
++                       pte_p = pgdir_walk(env->env_pgdir, (void *)addr, 0);
++                       if (pte_p && *pte_p && (*pte_p & required_perm)) {
++                               continue;
++                       }
++               }
++
++               // Either above ULIM or no permission
++               if (addr < (uintptr_t)va) {
++                       user_mem_check_addr = (uintptr_t)va;
++               } else {
++                       user_mem_check_addr = addr;
++               }
++               return -E_FAULT;
++       }
+ 
+        return 0;
+ }
+
+```
+
+Sanity check for system call.
+```diff
+--- a/kern/syscall.c
++++ b/kern/syscall.c
+@@ -21,6 +21,7 @@ sys_cputs(const char *s, size_t len)
+        // Destroy the environment if not.
+ 
+        // LAB 3: Your code here.
++       user_mem_assert(curenv, s, len, PTE_P);
+ 
+        // Print the string supplied by the user.
+        cprintf("%.*s", len, s);
+```
+
+Implement backtrace.
+```diff
+--- a/kern/kdebug.c
++++ b/kern/kdebug.c
+@@ -142,6 +142,9 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
+                // Make sure this memory is valid.
+                // Return -1 if it is not.  Hint: Call user_mem_check.
+                // LAB 3: Your code here.
++               if(user_mem_check(curenv, usd, sizeof(struct UserStabData), PTE_P | PTE_U) < 0) {
++                       return -1;
++               }
+ 
+                stabs = usd->stabs;
+                stab_end = usd->stab_end;
+@@ -150,6 +153,12 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
+ 
+                // Make sure the STABS and string table memory is valid.
+                // LAB 3: Your code here.
++               if(user_mem_check(curenv, stabs, (stab_end - stabs) * sizeof(struct Stab), PTE_P | PTE_U) < 0) {
++                       return -1;
++               }
++               if(user_mem_check(curenv, stabstr, (stabstr_end - stabstr), PTE_P | PTE_U) < 0) {
++                       return - 1;
++               }
+        }
+```
+
+Most of the code above are easy, given the detailed instruction. Just be careful about the logic in `user_mem_check`.  
+
+> Finally, change `debuginfo_eip` in `kern/kdebug.c` to call `user_mem_check` on usd, stabs, and stabstr. If you now run `user/breakpoint`, you should be able to run `backtrace` from the kernel monitor and see the `backtrace` traverse into `lib/libmain.c` before the kernel panics with a page fault. What causes this page fault? You don't need to fix it, but you should understand why it happens.  
+
+This is not easy. Check this answer: https://qiita.com/kagurazakakotori/items/334ab87a6eeb76711936  
+
+
+
