@@ -32,10 +32,6 @@ i386_init(void)
 	// Lab 2 memory management initialization functions
 	mem_init();
 
-	// Lab3 linker script debug
-	cprintf("edata: 0x%08x\n", edata);
-	cprintf("end: 0x%08x\n", end);
-
 	// Lab 3 user environment initialization functions
 	env_init();
 	trap_init();
@@ -46,7 +42,6 @@ i386_init(void)
 #else
 	// Touch all you want.
 	ENV_CREATE(user_hello, ENV_TYPE_USER);
-	cprintf("ENV_CREATE done!\n");
 #endif // TEST*
 
 	// We only have one user environment for now, so just run it.

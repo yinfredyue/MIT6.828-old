@@ -189,7 +189,6 @@ env_setup_vm(struct Env *e)
 	memset(e->env_pgdir, 0, PGSIZE);
 
 	p->pp_ref += 1;
-
 	// Use kern_pgdir as template.
 	// Use memcpy to make direct copy. You can do the same thing
 	// by making manual copy as below, but at this point, the kern_pgdir
@@ -197,14 +196,15 @@ env_setup_vm(struct Env *e)
 	// kernal part [KERNBASE, 4GB], and the content in [UTOP, KERNBASE].
 	// This is also mentioned in Lab2: you set up the kernel virtual address
 	// space and if user program gets the exact same mapping.
-	/*
-	uintptr_t start = ROUNDUP(UTOP, PGSIZE);
-	uintptr_t end = ROUNDUP((long long) 1 << 32, PGSIZE);
-	for(uintptr_t va = start; va < end; ) {
-		*(pgdir_walk(e->env_pgdir, (void *)va, 1)) = *(pgdir_walk(kern_pgdir, (void *)va, 0));
-		va += PGSIZE;
-	}
-	*/
+	
+	// Original solution:
+	// uintptr_t start = ROUNDUP(UTOP, PGSIZE);
+	// uintptr_t end = ROUNDUP((long long) 1 << 32, PGSIZE);
+	// for(uintptr_t va = start; va < end; ) {
+	// 	*(pgdir_walk(e->env_pgdir, (void *)va, 1)) = *(pgdir_walk(kern_pgdir, (void *)va, 0));
+	// 	va += PGSIZE;
+	// }
+	
 	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
 
 	// UVPT maps the env's own page table read-only.
@@ -297,22 +297,20 @@ region_alloc(struct Env *e, void *va, size_t len)
 	// Corner case: e equals to NULL
 	if(e == 0)
 		panic("The struct Env could not be NULL");
+
 	// corner case: len equals to 0
 	if(len == 0)
 		return;
 
 	uintptr_t start = (uintptr_t)ROUNDDOWN(va, PGSIZE);
 	uintptr_t end = (uintptr_t)ROUNDUP(va + len, PGSIZE);
-	if(start > end)
-	{
-		panic("The va_end is too large, and exceeds 32 bit RAM Limit");
-	}
+
 	for(uintptr_t vaddr = start; vaddr < end; vaddr += PGSIZE) {
 		struct PageInfo* pginfo_p = page_alloc(0);
 		if (pginfo_p == NULL) {
-			panic("page_alloc: Cannot allocate physical page");
+			panic("Cannot allocate physical page");
 		}
-		if (page_insert(e->env_pgdir, pginfo_p, va, PTE_P | PTE_U | PTE_W) < 0) {
+		if (page_insert(e->env_pgdir, pginfo_p, (void *)vaddr, PTE_P | PTE_U | PTE_W) < 0) {
 			panic("page insertion failed.");
 		}
 	}
@@ -377,8 +375,12 @@ load_icode(struct Env *e, uint8_t *binary)
 		panic("Not ELF format");
 	}
 
+	// The comment above says: "Loading the segments is much simpler if you
+	// can move data directly into the virtual addresses stored in the ELF
+	// binary". 
 	// Because previously we construct e->env_pgdir as an exact copy from 
-	// kern_pgdir using memcpy, so e->env_pgdir also has mepping for bianry. 
+	// kern_pgdir using memcpy, so e->env_pgdir also has mepping for binary! 
+	// So we can directly switch to user space!
 
 	// Switch to env_pgdir first, so we can use memset functions.
 	// Do not forget to switch back!
@@ -411,7 +413,7 @@ load_icode(struct Env *e, uint8_t *binary)
 	e->env_tf.tf_eip = elf->e_entry;
 
 	/*
-	- Initial method: uint8_t *binary is mapped at a physical region
+	Initial method: uint8_t *binary is mapped at a physical region
 	in kern_pgdir. So just copy the content in kern_pgdir into 
 	e->env_pgdir. This is copying the mapping essentially, but not the content.
 
@@ -473,9 +475,7 @@ env_create(uint8_t *binary, enum EnvType type)
 		panic("Cannot allocate new env");
 	}
 
-	cprintf("load_icode called!\n");
 	load_icode(curr_env, binary);
-	cprintf("load_icode done!\n");
 	curr_env->env_type = type;
 }
 

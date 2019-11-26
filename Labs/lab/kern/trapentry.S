@@ -41,15 +41,77 @@
 	pushl $(num);							\
 	jmp _alltraps
 
+/*
+ * YY: How to use the two macros provided?
+ * Think about how the predecessor would do with the macro: text substitution!
+ * So if you write: TRAPHANDLER_NOEC(myEntryPtName, myEntryPtNum), you get assembly
+ * code like:
+ *
+ * .globl myEntryPtName
+ * .type myEntryPtName, @function
+ * .align 2
+ * myEntryPtName:
+ * pushl $0
+ * pushl $(myEntryPtNum)
+ * jmp _alltraps
+ * 
+ * This is exactly the code you need to define a function! ".globl name" makes 
+ * this label (code location) visible to the entire file, ".type" and ".align" 
+ * specifies the type and alignment of the assembly code. Then "name:" starts the
+ * definition of the function in assembly code! 
+ * https://en.wikibooks.org/wiki/X86_Assembly/GAS_Syntax
+ */
+
 .text
+/* 
+ * Consult: https://pdos.csail.mit.edu/6.828/2018/readings/i386/s09_10.htm so 
+ * you know the error code behavior of each exception.
+ */
 
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
  */
-
-
+TRAPHANDLER_NOEC(DIVIDE, T_DIVIDE)
+TRAPHANDLER_NOEC(DEBUG, T_DEBUG)
+TRAPHANDLER(NMI, T_NMI)
+TRAPHANDLER_NOEC(BRKPT, T_BRKPT)
+TRAPHANDLER_NOEC(OFLOW, T_OFLOW)
+TRAPHANDLER_NOEC(BOUND, T_BOUND)
+TRAPHANDLER_NOEC(ILLOP, T_ILLOP)
+TRAPHANDLER_NOEC(DEVICE, T_DEVICE)
+TRAPHANDLER(DBLFLT, T_DBLFLT)
+TRAPHANDLER(TSS, T_TSS)
+TRAPHANDLER(SEGNP, T_SEGNP)
+TRAPHANDLER(STACK, T_STACK)
+TRAPHANDLER(GPFLT, T_GPFLT)
+TRAPHANDLER(PGFLT, T_PGFLT)
+TRAPHANDLER_NOEC(FPERR, T_FPERR)
+TRAPHANDLER(ALIGN, T_ALIGN)
+TRAPHANDLER(MCHK, T_MCHK)
+TRAPHANDLER(SIMDERR, T_SIMDERR)
+TRAPHANDLER_NOEC(SYSCALL, T_SYSCALL)
+TRAPHANDLER_NOEC(DEFAULT, T_DEFAULT)
 
 /*
  * Lab 3: Your code here for _alltraps
  */
+.globl _alltraps
+_alltraps:
+  # Continue building trap frame.
+  # Before entering _alltraps, ss, esp, eflags, cs, eip, error code and trapNo 
+  # has already been pushed to the kernel stack. Check struct Trapframe, the
+  # remaining register: ds, es and struct PushRegs.
+  # pushal handles struct PushRegs. 
+  pushl %ds
+  pushl %es
+  pushal
 
+  # Set up %ds, %es, 16-bit register! Use movw.
+  # Seems that you cannot move directly into %ds or %es, use %ax.
+  movw $GD_KD, %ax
+  movw %ax, %ds
+  movw %ax, %es
+
+  # Call trap(tf), where tf=%esp
+  pushl %esp
+  call trap     # Enter kernel code
