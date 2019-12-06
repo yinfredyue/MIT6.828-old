@@ -104,7 +104,7 @@ From xv6 book:
         ```
         trap => syscall => exec => readi => bread => iderw => trap.c/trap => ideintr() => acquire(&idelock) => panic
         ```
-        After printing out `init: starting sh`, `init` calls `exec`, which calls `readi`, which calls `bread`, which calls `iderw`, which calls `acquire` but still enables interrupt. Then interrupt occurs and interrupt handler takes on, tries to acquire lock, but in the same process and `holding` evaluates to `true` and `acquire` would panic.
+        After printing out `init: starting sh`, `init` calls `exec`, which calls `readi`, which calls `bread`, which calls `iderw`, which calls `acquire` but still enables interrupt. Then interrupt occurs and interrupt handler takes on, tries to acquire lock, but in the same process and `holding` evaluates to `true` (as the same cpu is holding the lock) and `acquire` would panic.
 
     - Situation 2
         ``` 
