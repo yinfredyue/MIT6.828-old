@@ -330,14 +330,14 @@ To provide protection:
     Note that the CPU uses vector to index into IDT to load proper value of %eip and %cs of the interrupte/exception handler. Before that, the processor needs to save the old processor state before the interrupt or exception occurred, such as the original values of EIP and CS before the processor invoked the exception handler, so that the exception handler can later restore that old state and resume execution. But this area for the old processor state must be protected from unprivileged user-mode code.  
 
     The old processor state would be stored on kernel stack. *Task state segment* specifies the segment selector and address of the kernel stack.  
-- Entire process  
+- Entire mechanism  
     When interrupt/exception happens, the processor switches to stack defined by the `SS0` and `ESP0` fields of the TSS, pushes SS, ESP, EFLAGS, CS, EIP, and an optional error code to the kernel stack. Then it loads the CS and EIP from the interrupt descriptor in IDT, and sets the ESP and SS to refer to the new stack.
 
 - JOS specific  
     Although the TSS is large and can potentially serve a variety of purposes, JOS only uses it to define the kernel stack. Since "kernel mode" in JOS is privilege level 0 on the x86, the processor uses the `ESP0` and `SS0` fields of the TSS to define the kernel stack when entering kernel mode. JOS doesn't use any other TSS fields.
 
 - Example   
-    Take a look at the good example provided in the lab sheet.  
+    Take a look at the good example provided in the lab sheet. Note on lecture 5 also provides very detailed explanation on the mechanism involed in a system call.
 
 ### Nested Exception and Interrupt
 The processor can take exceptions and interrupts both from kernel and user mode. It is only when entering the kernel from user mode that the x86 processor automatically switches stacks before pushing its old register state onto the stack and invoking the appropriate exception handler through the IDT. If the processor is already in kernel mode when the interrupt or exception occurs, then the CPU just pushes remaining values on the same kernel stack. In this way, the kernel can gracefully handle *nested exceptions* caused by code within the kernel itself. 

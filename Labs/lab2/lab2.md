@@ -1,5 +1,5 @@
 ## Lab2
-From this lab, you start building your JOS. It illustrates how you set up the upper part of the virtual address (kernel part) after booting the camera.  
+From this lab, you start building your JOS. It illustrates how you set up the upper part of the virtual address (kernel part) after booting the computer.  
 You need to understand the following for this lab.  
 1. What `entry.S` does:  
     - Set up `entry_pgdir` page table.  
@@ -8,7 +8,39 @@ You need to understand the following for this lab.
         By storing `CR0_PG` into `%cr0`.  
     - Reserve stack space in the `.data` segment, yielding symbol `bootstacktop` and `bootstack`.
     - Call `i386_init`.  
-2. What should we do in `mem_init`.  
+2. **An important question**: We know that `entry.S` turns on paging and since then, all memory references would be translated using the page table. In other words, when we issue memory address between `[0, 4M]` and `[KERNBASE, KERNBASE + 4MB]`, they would get translated. However, what cause all memory reference in kernel C code, e.g., `init.c` to be at address above `KERNBASE`?  
+    
+    You do not have to understand this to proceed, as you just need remember this phenomenon and keep this in mind when writing C code. But the reason is worth probing: this is the effect of linking.  
+    ``` 
+    $ objdump -x obj/kern/kernel | less
+    ...
+    Program Header:
+        LOAD off    0x00001000 vaddr 0xf0100000 paddr 0x00100000 align 2**12
+            filesz 0x00016ab3 memsz 0x00016ab3 flags r-x
+        LOAD off    0x00018000 vaddr 0xf0117000 paddr 0x00117000 align 2**12
+            filesz 0x001142b0 memsz 0x00157008 flags rw-
+    STACK off    0x00000000 vaddr 0x00000000 paddr 0x00000000 align 2**4
+            filesz 0x00000000 memsz 0x00000000 flags rwx
+
+    Sections:
+    Idx Name          Size      VMA       LMA       File off  Algn
+    0 .text         000061e9  f0100000  00100000  00001000  2**4
+                    CONTENTS, ALLOC, LOAD, READONLY, CODE
+    1 .rodata       00001cb3  f0106200  00106200  00007200  2**5
+                    CONTENTS, ALLOC, LOAD, READONLY, DATA
+    2 .stab         0000b431  f0107eb4  00107eb4  00008eb4  2**2
+                    CONTENTS, ALLOC, LOAD, READONLY, DATA
+    3 .stabstr      000037ce  f01132e5  001132e5  000142e5  2**0
+                    CONTENTS, ALLOC, LOAD, READONLY, DATA
+    4 .data         001142b0  f0117000  00117000  00018000  2**12
+                    CONTENTS, ALLOC, LOAD, DATA
+    5 .bss          00042008  f022c000  0022c000  0012c2b0  2**12
+                    ALLOC
+    SYMBOL TABLE:
+    ...
+    ```
+    You should see that `.text` is linked at address `0xf0100000`. Thus, all later addresses in C code are at high address, above `KERNBASE`. That is, every memory reference like `int a = 1;` in kernel C code is at high address above `KERNBASE`.  
+3. What should we do in `mem_init`.  
     - Note: since paging has been turned on, all C pointers or addresses are virtual addresses. Our goal is to use two-level page table instead of `entry_pgdir`. 
     - Allocate physical space for 4096-byte `pgdir` and `pages` (a list representing all physical frames), using `boot_alloc`. `boot_alloc` allocates physical memory from the 4MB space mapped by `entry_pgdir`. Set up `page_free_list` to represent free physical frames in `page_init()`.
     - Then we start building the two-level page table, with `boot_map_region()`. We need to map:

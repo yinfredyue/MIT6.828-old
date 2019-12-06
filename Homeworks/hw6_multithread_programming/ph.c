@@ -38,6 +38,7 @@ get(int key) {
     return e;
 }
 
+/* Used by put() */
 static void
 insert(int key, int value, struct entry **p, struct entry *n) {
     struct entry *e = malloc(sizeof(struct entry));
